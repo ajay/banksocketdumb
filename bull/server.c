@@ -50,6 +50,32 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 
+	//creating shared memory
+	int shmid;
+	key_t key;
+	int *shm;
+
+	key = 9876;
+
+	shmid = shmget(key, 20*sizeof(int), IPC_CREAT | 0666); // call to create shared memory
+	if(shmid < 0)
+	{
+		perror("shmget");
+		exit(1);
+	}
+
+	shm = shmat(shmid, NULL, 0);
+	memset((void *)shm, 0, 20*sizeof(int));
+ 	shmdt(shm);
+
+	if(shm == (char *) -1)
+	{
+		perror("shmat");
+		exit(1);
+	}
+
+
+
 	int sockfd;
 	int newsockfd;
 	int portno;
