@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -g -pedantic -Wall -std=gnu99 -O3 -Wno-unused-result
+CFLAGS = -g -pedantic -Wall -std=gnu99 -O3
 LIBS = -lpthread
 COMPILE = $(CC) $(CFLAGS)
 PROGRAMS = client server

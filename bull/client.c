@@ -5,45 +5,49 @@
 #include <string.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <signal.h>
 
-#define reset   "\x1b[0m"
-#define red     "\x1b[31m"
-#define green   "\x1b[32m"
-#define yellow  "\x1b[33m"
+#define reset	"\x1b[0m"
+#define red 	"\x1b[31m"	// Errors
+#define green	"\x1b[32m"
+#define yellow	"\x1b[33m"	// Server / Client comm
+#define blue	"\x1b[36m"	// Threads / Proccesses
+
+void client_stop(int signo)
+{
+	printf(blue "\n\nYou quit the client\n"
+				"Goodbye\n" reset);
+	exit(1);
+}
 
 void *comm_sender(void* sockfd)
 {
-	char buffer[6];
-	int n;
-
-	// Ask for message
+	char* buffer = "";
 	while (strcmp(buffer, "exit") != 0)
 	{
-		printf("Please enter one of the following: \n> open \n> start \n> exit\n");
-		//bzero(buffer, 256);
-		//fgets(buffer, 255, stdin);
-		// scanf("%s",buffer);
-		char * temp = NULL;
+		// Ask for message
+		printf("Please enter one of the following: \n"
+				"> open <accountname> \n"
+				"> start <accountname> \n"
+				"> credit <amount> \n"
+				"> debit <amount> \n"
+				"> balance \n"
+				"> finish \n"
+				"> exit\n\n"
+				"> ");
+
+		buffer = NULL;
 		size_t len;
-		// FILE* fp = fdopen((int)(size_t)sockfd, "rw");
-		getline(&temp, &len, stdin);
 
-		printf("client temp line: %s\n", temp);
-
-		// while(strcmp(buffer, "open") != 0 && strcmp(buffer, "start") != 0 && strcmp(buffer, "exit") != 0)
-		// {
-		// 	printf("ERROR! Please enter one of the following 1.open  2.start  3.exit:\n");
-		// 	//bzero(buffer, 256);
-		// 	//fgets(buffer, 255, stdin);
-		// 	scanf("%s",buffer);
-		// }
+		if (getline(&buffer, &len, stdin) < 0)
+		{
+			perror(red "ERROR with getline" reset);
+		};
 
 		// Send message to server
-		n = write((int)(size_t)sockfd, temp, strlen(temp));
-
-		if (n < 0)
+		if (write((int)(size_t)sockfd, buffer, strlen(buffer)) < 0)
 		{
-			perror(red "ERROR writing to socket: " reset);
+			perror(red "ERROR writing to socket" reset);
 			exit(1);
 		}
 		sleep(1);
@@ -62,7 +66,7 @@ void *comm_listener(void * sockfd)
 
 	if (n < 0)
 	{
-		perror(red "ERROR reading from socket: " reset);
+		perror(red "ERROR reading from socket" reset);
 		exit(1);
 	}
 
@@ -73,6 +77,7 @@ void *comm_listener(void * sockfd)
 
 int main(int argc, char *argv[])
 {
+	signal(SIGINT, client_stop);
 	intptr_t sockfd;
 	int portno = 5001;
 	struct sockaddr_in serv_addr;
@@ -80,7 +85,8 @@ int main(int argc, char *argv[])
 
 	if (argc != 2)
 	{
-		printf(red "Why you a dumbass tho\n" reset);
+		printf(red "ERROR: Invalid input\n"
+			yellow "Usage: ./client <server_ip_address>\n" reset);
 		exit(0);
 	}
 
@@ -89,7 +95,7 @@ int main(int argc, char *argv[])
 
 	if (sockfd < 0)
 	{
-		perror(red "ERROR opening socket: " reset);
+		perror(red "ERROR opening socket" reset);
 		exit(1);
 	}
 
@@ -107,25 +113,32 @@ int main(int argc, char *argv[])
 	serv_addr.sin_port = htons(portno);
 
 	// Connect to server
-	if (connect(sockfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) < 0)
+	while (connect(sockfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) < 0)
 	{
-		perror(red "ERROR connecting: " reset);
-		exit(1);
+		perror(red "ERROR connecting" reset);
+		fprintf(stderr, yellow "Attempting to re-connect to server in 3 seconds ");
+
+		for (int i=0; i<10; i++)
+		{
+			usleep(300000);
+			fprintf(stderr, ".");
+		}
+		printf("\n" reset);
 	}
 
-	printf("creating sender\n");
+	printf(blue "creating sender thread for client\n" reset);
 	pthread_t senderThread;
 	if (pthread_create(&senderThread, NULL, comm_sender, (void*)sockfd))
 	{
-		perror(red "ERROR creating thread: " reset);
+		perror(red "ERROR creating thread" reset);
 		exit(0);
 	}
 
-	printf("creating listener\n");
+	printf(blue "creating listener thread for client\n" reset);
 	pthread_t listenerThread;
 	if (pthread_create(&listenerThread, NULL, comm_listener, (void*)sockfd))
 	{
-		perror(red "ERROR creating thread: " reset);
+		perror(red "ERROR creating thread" reset);
 		exit(0);
 	}
 

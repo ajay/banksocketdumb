@@ -9,21 +9,25 @@
 #include <sys/ipc.h>
 #include <sys/sem.h>
 #include <semaphore.h>
+#include <signal.h>
 
-#define reset   "\x1b[0m"
-#define red     "\x1b[31m"
-#define green   "\x1b[32m"
-#define yellow  "\x1b[33m"
+#define reset	"\x1b[0m"
+#define red 	"\x1b[31m"	// Errors
+#define green	"\x1b[32m"
+#define yellow	"\x1b[33m"	// Server / Client comm
+#define blue	"\x1b[36m"	// Threads / Proccesses
 
 static int acc = 5;
 
+void server_stop(int signo)
+{
+	printf(blue "\n\nYou quit the server\n"
+				"Goodbye\n" reset);
+	exit(1);
+}
+
 char* doprocessing (char *buffer, int sock, int shmid)
 {
-	// acc++;
-
-
-
-
 	int n;
 	bzero(buffer, 256);
 	n = read(sock, buffer, 255);
@@ -35,7 +39,7 @@ char* doprocessing (char *buffer, int sock, int shmid)
 
 	if (n < 0)
 	{
-		perror(red "ERROR reading from socket: " reset);
+		perror(red "ERROR reading from socket" reset);
 		exit(1);
 	}
 	if (strcmp(sub, "exit") == 0)
@@ -45,18 +49,14 @@ char* doprocessing (char *buffer, int sock, int shmid)
 
 	if (n < 0)
 	{
-		perror(red "ERROR writing to socket: " reset);
+		perror(red "ERROR writing to socket" reset);
 		exit(1);
 	}
 
 	printf("received: %s\n", buffer);
 	printf("acc is %d\n", acc);
 
-
-
-
 	sharedMemory *shm = (sharedMemory *)shmat(shmid, NULL, 0);
-
 
 	printf("locking sem, pid = %d\n", getpid());
 	sem_wait(&shm->accountsArray[acc].lock);
@@ -77,6 +77,7 @@ char* doprocessing (char *buffer, int sock, int shmid)
 
 int main(int argc, char *argv[])
 {
+	signal(SIGINT, server_stop);
 	if (argc != 1)
 	{
 		printf(red "wyd bitch?\n" reset);
@@ -108,7 +109,7 @@ int main(int argc, char *argv[])
 	 // call to create shared memory
 	shm = (sharedMemory*)shmat(shmid, NULL, 0);
 
-	printf("Yoooo size of shm: %ld\n", sizeof(shm));
+	printf("Yoooo size of shm: %ld\n", sizeof(&shm));
 	memset((sharedMemory *)shm, 0, totalSize);
  	shmdt(shm);
 
@@ -156,7 +157,7 @@ int main(int argc, char *argv[])
 
 	if (sockfd < 0)
 	{
-		perror(red "ERROR opening socket: " reset);
+		perror(red "ERROR opening socket" reset);
 		exit(1);
 	}
 
@@ -169,10 +170,17 @@ int main(int argc, char *argv[])
 	serv_addr.sin_port = htons(portno);
 
 	// Bind address
-	if (bind(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0)
+	while (bind(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0)
 	{
-		perror(red "ERROR on binding: " reset);
-		exit(1);
+		perror(red "ERROR on binding" reset);
+		fprintf(stderr, yellow "Attempting to re-bind to socket in 5 seconds ");
+
+		for (int i=0; i<10; i++)
+		{
+			usleep(500000);
+			fprintf(stderr, ".");
+		}
+		printf("\n" reset);
 	}
 
 	listen(sockfd, 5);
@@ -185,7 +193,7 @@ int main(int argc, char *argv[])
 
 		if (newsockfd < 0)
 		{
-			perror(red "ERROR on accept: " reset);
+			perror(red "ERROR on accepts" reset);
 			exit(1);
 		}
 
@@ -194,7 +202,7 @@ int main(int argc, char *argv[])
 		// Forking error
 		if (pid < 0)
 		{
-			perror(red "ERROR on fork: " reset);
+			perror(red "ERROR on fork" reset);
 			exit(1);
 		}
 
