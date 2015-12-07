@@ -10,16 +10,15 @@
 typedef struct Account
 {
 	char name[100];
-	float data;
-	bool inSession;
+	float balance;
+	sem_t lock;
 } Account;
 
 
 typedef struct sharedMemory
 {
 	Account accountsArray[20];
-	sem_t lock[20];
-
+	sem_t bankLock;
 } sharedMemory;
 
 #endif

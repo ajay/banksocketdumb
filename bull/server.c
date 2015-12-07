@@ -5,14 +5,25 @@
 #include <string.h>
 #include <unistd.h>
 #include "server.h"
+#include <sys/shm.h>
+#include <sys/ipc.h>
+#include <sys/sem.h>
+#include <semaphore.h>
 
 #define reset   "\x1b[0m"
 #define red     "\x1b[31m"
 #define green   "\x1b[32m"
 #define yellow  "\x1b[33m"
 
-char* doprocessing (char *buffer, int sock)
+static int acc = 5;
+
+char* doprocessing (char *buffer, int sock, int shmid)
 {
+	// acc++;
+
+
+
+
 	int n;
 	bzero(buffer, 256);
 	n = read(sock, buffer, 255);
@@ -39,6 +50,28 @@ char* doprocessing (char *buffer, int sock)
 	}
 
 	printf("received: %s\n", buffer);
+	printf("acc is %d\n", acc);
+
+
+
+
+	sharedMemory *shm = (sharedMemory *)shmat(shmid, NULL, 0);
+
+
+	printf("locking sem, pid = %d\n", getpid());
+	sem_wait(&shm->accountsArray[acc].lock);
+
+	printf("gay ass memory spot account name %d: %s\n", acc, shm->accountsArray[acc].name);
+	printf("gay ass memory spot balance %d: %f\n", acc, shm->accountsArray[acc].balance);
+
+	bzero(buffer, 256);
+	n = read(sock, buffer, 255);
+
+	puts("unlocking sem");
+	sem_post(&shm->accountsArray[acc].lock);
+
+
+
 	return buffer;
 }
 
@@ -53,26 +86,58 @@ int main(int argc, char *argv[])
 	//creating shared memory
 	int shmid;
 	key_t key;
-	int *shm;
+	sharedMemory *shm;
 
-	key = 9876;
+	int totalSize = sizeof(sharedMemory);
 
-	shmid = shmget(key, 20*sizeof(int), IPC_CREAT | 0666); // call to create shared memory
+	printf("sizeof sharedMemory: %d\n", totalSize);
+
+	key = 2214;
+
+	shmid = shmget(key, totalSize, IPC_CREAT | IPC_EXCL | 0666); // call to create shared memory
+
 	if(shmid < 0)
 	{
-		perror("shmget");
-		exit(1);
+		shmid = shmget(key, totalSize, 0666);
+		shmctl(shmid, IPC_RMID, NULL);
+		shmid = shmget(key, totalSize, IPC_CREAT | IPC_EXCL | 0666);
+		printf("%d\n", shmid);
+		// exit(1);
 	}
 
-	shm = shmat(shmid, NULL, 0);
-	memset((void *)shm, 0, 20*sizeof(int));
+	 // call to create shared memory
+	shm = (sharedMemory*)shmat(shmid, NULL, 0);
+
+	printf("Yoooo size of shm: %ld\n", sizeof(shm));
+	memset((sharedMemory *)shm, 0, totalSize);
  	shmdt(shm);
 
-	if(shm == (char *) -1)
+	if(shm == (sharedMemory *) -1)
 	{
 		perror("shmat");
 		exit(1);
 	}
+
+	sharedMemory *shmPointer = (sharedMemory *)shmat(shmid, NULL, 0);
+
+
+	int j;
+	for(j = 0; j < 20; j++)
+	{
+		sem_t locker;
+		printf("writing j = %d\n", j);
+		char title[80];
+		sprintf(title, "account %d", j);
+		strcpy(shm->accountsArray[j].name, title);
+		shmPointer->accountsArray[j].balance = rand();
+		shmPointer->accountsArray[j].lock = locker;
+		sem_init(&shmPointer->accountsArray[j].lock, 1, 1);
+	}
+
+
+
+
+
 
 
 
@@ -139,7 +204,7 @@ int main(int argc, char *argv[])
 
 			while (strcmp(buffer, "exit") != 0)
 			{
-				strcpy(buffer, doprocessing(buffer, newsockfd));
+				strcpy(buffer, doprocessing(buffer, newsockfd, shmid));
 			}
 			printf("I am pid %d exiting\n", getpid());
 			close(sockfd);
