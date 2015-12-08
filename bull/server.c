@@ -79,17 +79,7 @@ char* doprocessing (char *buffer, int sock, int shmid)
 	char* command = strtok(buffer, " ");
 	char* accName = command+strlen(command)+1;
 
-	if(accName[0] == 0x20 || accName[0] == 0x09 || accName[0] == 0x0a || accName[0] == 0x0b || accName[0] == 0x0c || accName[0] == 0x0d)
-	{
-		strcpy(command,"spaces_dont_fricking_count");
-	}
-
-	sharedMemory *bank = (sharedMemory *)shmat(shmid, NULL, 0);
-
-
-
-
-
+	sharedMemory *bank = (sharedMemory *)shmat(shmid, NULL, 0); //attach shared memory
 
 
 
@@ -118,6 +108,17 @@ char* doprocessing (char *buffer, int sock, int shmid)
 
 			else if(strcmp(bank->accounts[x].name, "<empty>") == 0)
 			{
+				if(accName[0] == 0x20 || accName[0] == 0x09 || accName[0] == 0x0a || accName[0] == 0x0b || accName[0] == 0x0c || accName[0] == 0x0d)
+				{
+					strcpy(command,"Can't have account name with spaces!");
+					char toSend[100];
+					sprintf(toSend, "The accountname with spaces can't be created");
+					if (write(sock, toSend, 100) < 0)
+					{
+						perror(red "ERROR sending account creation message");
+					}
+					break;
+				}
 				strcpy(bank->accounts[x].name, accName);
 				printf("The account '%s' is created \n", accName);		//Case 2. Account created
 
@@ -278,12 +279,22 @@ char* doprocessing (char *buffer, int sock, int shmid)
 			perror("n<0 ");
 		}
 	}
+	else if(strcmp(command, "exit") == 0)
+	{
+		char send[200];
+		sprintf(send, "exit");
+		int a;
+		a = write(sock, send, strlen(send));
+
+		if(a < 0)
+		{
+			perror("n<0 ");
+		}
+	}
 
 
 
 	// printf("acc is %d\n", acc);      token = strtok(NULL, s);
-
-
 
 	printf("locking sem for account: %s, pid = %d\n", bank->accounts[acc].name, getpid());
 	sem_wait(&bank->accounts[acc].lock);
@@ -296,6 +307,8 @@ char* doprocessing (char *buffer, int sock, int shmid)
 
 	printf("unlocking sem for account: %s\n", bank->accounts[acc].name);
 	sem_post(&bank->accounts[acc].lock);
+
+	shmdt(bank); //detach shared memory
 
 	printf("\n\n");
 	return buffer;
