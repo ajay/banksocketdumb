@@ -135,9 +135,6 @@ char* doprocessing (char *buffer, int sock, int shmid)
 
 		for(int x = 0; x < 20; x++) //20 because 20 possible accounts
 		{
-			sleep(100);
-
-
 
 			if(strcmp(bank->accounts[x].name, accName) == 0)
 			{
