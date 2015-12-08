@@ -51,7 +51,7 @@ void *comm_sender(void* sockfd)
 			perror(red "ERROR writing to socket" reset);
 			exit(1);
 		}
-		sleep(1);
+		sleep(2);  //throttle 2 seconds
 	}
 	return NULL;
 }
@@ -129,6 +129,8 @@ int main(int argc, char *argv[])
 		}
 		printf("\n" reset);
 	}
+
+	printf("Connected to the server\n");
 
 	printf(blue "creating sender thread for client\n" reset);
 	pthread_t senderThread;

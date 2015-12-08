@@ -108,11 +108,11 @@ char* doprocessing (char *buffer, int sock, int shmid)
 
 			else if(strcmp(bank->accounts[x].name, "<empty>") == 0)
 			{
-				if(accName[0] == 0x20 || accName[0] == 0x09 || accName[0] == 0x0a || accName[0] == 0x0b || accName[0] == 0x0c || accName[0] == 0x0d)
+				if(accName[0] == 0x20 || accName[0] == 0x09 || accName[0] == 0x0a || accName[0] == 0x0b || accName[0] == 0x0c || accName[0] == 0x0d || strlen(accName) > 100)
 				{
-					strcpy(command,"Can't have account name with spaces!");
+					strcpy(command,"Invalid account name!");
 					char toSend[100];
-					sprintf(toSend, "The accountname with spaces can't be created");
+					sprintf(toSend, "Invalid account name!");
 					if (write(sock, toSend, 100) < 0)
 					{
 						perror(red "ERROR sending account creation message");
