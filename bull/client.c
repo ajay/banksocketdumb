@@ -9,7 +9,7 @@
 
 #define reset	"\x1b[0m"
 #define red 	"\x1b[31m"	// Errors
-#define green	"\x1b[32m"
+#define green	"\x1b[32m"	// Messages from server
 #define yellow	"\x1b[33m"	// Server / Client comm
 #define blue	"\x1b[36m"	// Threads / Proccesses
 
@@ -26,6 +26,7 @@ void *comm_sender(void* sockfd)
 	while (strcmp(buffer, "exit") != 0)
 	{
 		// Ask for message
+		printf("\n----------------------------------\n");
 		printf("Please enter one of the following: \n"
 				"> open <accountname> \n"
 				"> start <accountname> \n"
@@ -55,23 +56,21 @@ void *comm_sender(void* sockfd)
 	return NULL;
 }
 
-void *comm_listener(void * sockfd)
+void *comm_listener(void* sockfd)
 {
-	char buffer[256];
-	int n;
-
-	// Read response from server
-	bzero(buffer, 256);
-	n = read((int)(size_t)sockfd, buffer, 255);
-
-	if (n < 0)
+	while (1)
 	{
-		perror(red "ERROR reading from socket" reset);
-		exit(1);
-	}
+		char buffer[256];
+		bzero(buffer, 256);
 
-	printf("Received message: ");
-	printf("%s\n", buffer);
+		if (read((int)(size_t)sockfd, buffer, 255) < 0)
+		{
+			perror(red "ERROR reading from socket" reset);
+		}
+
+		printf(green "Received message from server: " reset);
+		printf("%s\n", buffer);
+	}
 	return NULL;
 }
 
@@ -143,5 +142,7 @@ int main(int argc, char *argv[])
 	}
 
 	pthread_join(senderThread, NULL);
+	// pthread_join(listenerThread, NULL);
+
 	return 0;
 }

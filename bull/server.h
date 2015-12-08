@@ -12,13 +12,15 @@ typedef struct Account
 	char name[100];
 	float balance;
 	sem_t lock;
+	bool inSession;
 } Account;
 
 
 typedef struct sharedMemory
 {
-	Account accountsArray[20];
+	Account accounts[20];
 	sem_t bankLock;
+	bool bankInUse;
 } sharedMemory;
 
 #endif
