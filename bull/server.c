@@ -20,10 +20,15 @@
 
 #define PORT 	5001
 
+static int SOCK;
 static int acc = 5;
 
 void server_stop(int signo)
 {
+	if (write(SOCK, "exit", 6) < 0)
+	{
+		perror(red "ERROR with sending exit to client");
+	}
 	printf(blue "\n\nYou quit the server\n"
 				"Goodbye\n" reset);
 	exit(1);
@@ -31,128 +36,101 @@ void server_stop(int signo)
 
 void printStatus(int shmid)
 {
+
 	sharedMemory *bank = (sharedMemory *)shmat((int)(size_t)shmid, NULL, 0);
-	printf("-------------------------------------------------------------\n");
+	sem_wait(&bank->bankLock);
+
+	printf(purple "-------------------------------------------------------------\n");
 
 	for(int j = 0; j < 20; j++)
 	{
-		printf("Account Name: %s\tBalance: %.2f\tIn Session: %d\n", bank->accounts[j].name, bank->accounts[j].balance, bank->accounts[j].inSession);
+		if (strcmp(bank->accounts[j].name, "<empty>") != 0)
+			printf("Account Name: %s\tBalance: %.2f\tIn Session: %d\n", bank->accounts[j].name, bank->accounts[j].balance, bank->accounts[j].inSession);
 	}
-	printf("\n");
+	printf("\n" reset);
+	sem_post(&bank->bankLock);
+
 }
 
 void* printBank(void* shmid)
 {
 	while (1)
 	{
-		sleep(2);
+		sleep(20);
 		printStatus((int)(size_t)shmid);
 	}
 }
 
 char* doprocessing (char *buffer, int sock, int shmid)
 {
-	int n;
+	SOCK = sock;
 	bzero(buffer, 256);
-	n = read(sock, buffer, 255);
 
-	char sub[5];
-	strncpy(sub, buffer, 4);
-	sub[4] = '\0';
-	// n = write(sock, "hayyyyyylo lol", 20);
-
-	if (n < 0)
+	if (read(sock, buffer, 255) < 0)
 	{
 		perror(red "ERROR reading from socket" reset);
 		exit(1);
 	}
 
-	if (strcmp(sub, "exit") == 0)
-	{
-		printf("GOTTA EXIT \n");
-		n = write(sock, "you just typed exit ha", 30);
-	}
-
-	if (n < 0)
-	{
-		perror(red "ERROR writing to socket" reset);
-		exit(1);
-	}
-
-	// printf("received: %s", buffer);
-	// fflush(stdout);
-
-	// printf("size of buffer: %ld\n", strlen(buffer));
 	buffer[strlen(buffer)-1] = '\0';
-	// printf("size of new buffer: %ld\n", strlen(buffer));
-	printf("Received & fixed: %s\n", buffer);
+
+	printf(yellow "Message received from client: %s\n" reset, buffer);
 
 	char* command = strtok(buffer, " ");
-	printf("First word of buffer: %s\n", command);
-
 	char* accName = command+strlen(command)+1;
-	printf("Rest of buffer: %s\n", accName);
 
-
-	if (strstr(accName, " ") != NULL)
+	if(accName[0] == 0x20 || accName[0] == 0x09 || accName[0] == 0x0a || accName[0] == 0x0b || accName[0] == 0x0c || accName[0] == 0x0d)
 	{
-    	printf(red "ERROR: Account names can not have spaces\n" reset);
+		strcpy(command,"spaces_dont_fricking_count");
 	}
-
-	if (strcmp(command, "status") == 0)
-	{
-		printStatus(shmid);
-	}
-
-
 
 	sharedMemory *bank = (sharedMemory *)shmat(shmid, NULL, 0);
 
 
 
-	/////////////////////////////////////////////////////////////
-	//
-	//
-	//
-	//
-	//
 
-	if(strcmp(command, "open") == 0)
+
+
+
+
+
+
+	if (strcmp(command, "open") == 0)
 	{
-		// printf("In open\n");
-
-		// Lock array
-		if(bank->bankInUse == true)
-		{
-			printf(red "ERROR: Someone is opening an account, please try again at another time\n" reset);
-			// break;
-			// exit(1);
-		}
 		bank->bankInUse = true;
 
-		//check the shared-mem if the account name already exists
 		int y = 0;
 
-		for(int x = 0; x < 20; x++) //20 because 20 possible accounts
+		for(int x = 0; x < 20; x++)
 		{
-
 			if(strcmp(bank->accounts[x].name, accName) == 0)
 			{
-				printf("The account name '%s' already exists \n", accName);  //Case 1. Account exists
+				char toSend[100];
+				sprintf(toSend, "An account with the name '%s' already exists \n", accName);
+				if (write(sock, toSend, strlen(toSend)) < 0)
+				{
+					perror(red "ERROR sending new account message" reset);
+				}
 				y = 1;
 				bank->bankInUse = false;
 				x = 20;
 			}
 
-
 			else if(strcmp(bank->accounts[x].name, "<empty>") == 0)
 			{
 				strcpy(bank->accounts[x].name, accName);
 				printf("The account '%s' is created \n", accName);		//Case 2. Account created
+
+				char toSend[100];
+				sprintf(toSend, "The account '%s' was created", bank->accounts[x].name);
+				if (write(sock, toSend, 100) < 0)
+				{
+					perror(red "ERROR sending account creation message");
+				}
+
 				bank->bankInUse = false;
 				y = 1;
 				x = 20;
-
 			}
 		}
 
@@ -163,106 +141,143 @@ char* doprocessing (char *buffer, int sock, int shmid)
 		}
 	}
 
-	/*
-	else if(strcmp(command, "start") == 0)
+	if (strcmp(command, "status") == 0)
+	{
+		printStatus(shmid);
+	}
+
+	if(strcmp(command, "start") == 0)
 	{
 		int x;
 		int y = 0;
+
 		for(x=0; x < 20; x++) //find the account and try to access it
 		{
 			if(strcmp(bank->accounts[x].name, accName) == 0 && bank->accounts[x].inSession == false) //account exists and is not locked
 			{
 				printf("The account name '%s' exists at index '%d'\n", accName, x);  //Case 1. Account exists and i got index
-				int y = 1;
-				bank->accounts[x]->inSession = true;
+				y = 1;
+				bank->accounts[x].inSession = true;
 
-				\\forever loop to take the other commands while in session
-				while(bank->accounts[x]->inSession = true)
+				char toSend[100];
+				sprintf(toSend, "You just logged into %s", bank->accounts[x].name);
+				int poo = write(sock, toSend, strlen(toSend));
+
+				if (poo < 0)
 				{
-					sem_wait(bank->accounts[x].lock);
-					n = read(sock, buffer, 255);
+					perror(red "ERROR" reset);
+				}
+
+				//forever loop to take the other commands while in session
+				while(bank->accounts[x].inSession == true)
+				{
+					sem_wait(&bank->accounts[x].lock);
+					bzero(buffer, 256);
+					int n = read(sock, buffer, 255);
+
+					if (n < 0)
+					{
+						perror(red "ERROR writing to socket" reset);
+						exit(1);
+					}
+
+					buffer[strlen(buffer)-1] = '\0';
+
+					char* command = strtok(buffer, " ");
+					char* amount = command+strlen(command)+1;
+
+					printf("command: %s\n", command);
+
+					char toSend[100];
+
 
 					if(strcmp(command, "open") == 0)
 					{
-						printf("In session, sucks dumbass");
+						sprintf(toSend, "You are already logged into %s\n", bank->accounts[x].name);
 					}
 					else if(strcmp(command, "start") == 0)
 					{
-						printf("In session, stop being dumb and finish ur business");
+
+						sprintf(toSend, "You are already loggged into %s\n", bank->accounts[x].name);
 					}
 					else if(strcmp(command, "credit") == 0)
 					{
-						//add amount
-						//write balance
+						float num = atof(amount);
+						sprintf(toSend, "Crediting account '%s' by '%.2f'\n", bank->accounts[x].name, num);
+						bank->accounts[x].balance += num;
+
 					}
 					else if(strcmp(command, "debit") == 0)
 					{
-						//subtract amount
-						//write balance
+						float num = atof(amount);
+						if (num < bank->accounts[x].balance)
+						{
+							sprintf(toSend, "Debiting account '%s' by '%.2f'\n", bank->accounts[x].name, num);
+							bank->accounts[x].balance -= num;
+						}
+						else
+						{
+							sprintf(toSend, "You can not debit account '%s' by '%.2f'. The balance is too low.\n", bank->accounts[x].name, num);
+						}
 					}
 					else if(strcmp(command, "balance") == 0)
 					{
-						//write balance
-					}
+						sprintf(toSend, "The balance of account '%s' is '%.2f'\n", bank->accounts[x].name, bank->accounts[x].balance);
 					}
 					else if(strcmp(command, "finish") == 0)
 					{
-						lock = 0;
-						bank->accounts[x]->inSession = false;
-						sem_post(bank->accounts[x].lock);
+						// lock = 0;
+						bank->accounts[x].inSession = false;
+						sprintf(toSend, "You just logged out of %s", bank->accounts[x].name);
+						// x = 20;
+						// sem_post(bank->accounts[x].lock);
 						//exit();
 					}
 					else if(strcmp(command, "exit") == 0)
 					{
-						lock = 0;
-						bank->accounts[x]->inSession = false;
-						sem_post(bank->accounts[x].lock);
+						// lock = 0;
+						bank->accounts[x].inSession = false;
+						sprintf(toSend, "exit");
+						// sem_post(bank->accounts[x].lock);
 						//exit(1);
-					}else{
-						printf("bad command?")
+					}
+					else
+					{
+						sprintf(toSend, "Invalid Input");
 						//exit(1);
 					}
 
+					n = write(sock, toSend, strlen(toSend));
 
-					//sub is the string/message we send back.
-
-					n = write(sock, sub,4);
-
-					sem_post(bank->accounts[x].lock);
+					sem_post(&bank->accounts[x].lock);
 				}
+				break;
 			}
 		}
 
-		if(y = 0)
+		if(y == 0)
 		{
-			printf("The account doesn't exist or is currently being used.");
-			exit(1);
+			char toSend[100];
+			sprintf(toSend, "Can not start: the account doesn't exist or is currently being used.");
+			if (write(sock, toSend, strlen(toSend)) < 0)
+			{
+				perror(red "ERROR writing start back to client" reset);
+			}
 		}
 		//have to stop the client from opening accounts or logging into other accounts
-	} */
+	}
+	else if(strcmp(command, "credit") == 0 || strcmp(command, "debit") == 0 || strcmp(command, "balance") == 0 || strcmp(command, "finish") == 0)
+	{
+		char send[200];
+		sprintf(send,"You are not logged into a account, so %s is an invalid action.\n",command);
+		int a;
+		a = write(sock, send, strlen(send));
 
-
-
-
-
-////
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+		if(a < 0)
+		{
+			perror("n<0 ");
+		}
+	}
 
 
 
@@ -323,14 +338,12 @@ int setupMemory()
 
 	sharedMemory *bank = (sharedMemory *)shmat(shmid, NULL, 0);
 
-	printf(purple "Initial Bank Accounts: \n");
-
 	for(int j = 0; j < 20; j++)
 	{
 		char* title = "<empty>";
 		strcpy(bank->accounts[j].name, title);
 
-		bank->accounts[j].balance = rand();
+		bank->accounts[j].balance = 0;
 		bank->accounts[j].inSession = false;
 
 		sem_t locker;
@@ -338,6 +351,9 @@ int setupMemory()
 		sem_init(&bank->accounts[j].lock, 1, 1);
 	}
 
+	sem_init(&bank->bankLock, 1, 1);
+
+	printf(purple "Initial Bank Accounts: \n" reset);
 	printStatus(shmid);
 
 	return shmid;
@@ -451,8 +467,6 @@ int main(int argc, char *argv[])
 	{
 		newsockfd = accept(sockfd, (struct sockaddr *) &cli_addr, &clilen);
 
-		printf(blue "New client connection opened\n"
-					"Client process with pid %d listening\n" reset, getpid());
 
 		if (newsockfd < 0)
 		{
@@ -461,6 +475,9 @@ int main(int argc, char *argv[])
 		}
 
 		pid = fork();
+
+
+
 
 		// Forking error
 		if (pid < 0)
@@ -471,6 +488,11 @@ int main(int argc, char *argv[])
 
 		if (pid == 0) // Child process
 		{
+
+			printf(blue "New client connection opened\n"
+				"Client process with pid %d listening\n" reset, getpid());
+
+
 			char buffer[256];
 
 			while (strcmp(buffer, "exit") != 0)

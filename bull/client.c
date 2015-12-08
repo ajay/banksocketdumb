@@ -70,6 +70,11 @@ void *comm_listener(void* sockfd)
 
 		printf(green "Received message from server: " reset);
 		printf("%s\n", buffer);
+
+		if (strcmp(buffer, "exit") == 0)
+		{
+			exit(0);
+		}
 	}
 	return NULL;
 }
