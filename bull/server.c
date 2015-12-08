@@ -29,13 +29,24 @@ void server_stop(int signo)
 	exit(1);
 }
 
-void printBank(int shmid)
+void printStatus(int shmid)
 {
-	sharedMemory *bank = (sharedMemory *)shmat(shmid, NULL, 0);
+	sharedMemory *bank = (sharedMemory *)shmat((int)(size_t)shmid, NULL, 0);
+	printf("-------------------------------------------------------------\n");
 
 	for(int j = 0; j < 20; j++)
 	{
 		printf("Account Name: %s\tBalance: %.2f\tIn Session: %d\n", bank->accounts[j].name, bank->accounts[j].balance, bank->accounts[j].inSession);
+	}
+	printf("\n");
+}
+
+void* printBank(void* shmid)
+{
+	while (1)
+	{
+		sleep(2);
+		printStatus((int)(size_t)shmid);
 	}
 }
 
@@ -90,7 +101,7 @@ char* doprocessing (char *buffer, int sock, int shmid)
 
 	if (strcmp(command, "status") == 0)
 	{
-		printBank(shmid);
+		printStatus(shmid);
 	}
 
 
@@ -108,10 +119,12 @@ char* doprocessing (char *buffer, int sock, int shmid)
 
 	if(strcmp(command, "open") == 0)
 	{
+		// printf("In open\n");
+
 		// Lock array
 		if(bank->bankInUse == true)
 		{
-			printf(red "ERROR: Someone is opening an account, please try again at another time" reset);
+			printf(red "ERROR: Someone is opening an account, please try again at another time\n" reset);
 			// break;
 			// exit(1);
 		}
@@ -122,7 +135,7 @@ char* doprocessing (char *buffer, int sock, int shmid)
 
 		for(int x = 0; x < 20; x++) //20 because 20 possible accounts
 		{
-
+			sleep(100);
 
 
 
@@ -328,7 +341,7 @@ int setupMemory()
 		sem_init(&bank->accounts[j].lock, 1, 1);
 	}
 
-	printBank(shmid);
+	printStatus(shmid);
 
 	return shmid;
 }
@@ -345,6 +358,12 @@ int main(int argc, char *argv[])
 	}
 
 	int shmid = setupMemory();
+
+
+
+
+
+
 
 	int sockfd;
 	int newsockfd;
@@ -398,6 +417,33 @@ int main(int argc, char *argv[])
 		}
 		printf("\n" reset);
 	}
+
+
+
+
+
+
+
+
+	printf(blue "creating statusThread on server\n" reset);
+	pthread_t statusThread;
+	if (pthread_create(&statusThread, NULL, printBank, (void*)(size_t)shmid))
+	{
+		perror(red "ERROR creating thread" reset);
+		exit(0);
+	}
+
+
+
+
+
+
+
+
+
+
+
+
 
 	printf(blue "Bank Server process (PID = %d) connected and listening on port %d\n", getpid(), PORT);
 
