@@ -8,8 +8,10 @@
 #include <sys/shm.h>
 #include <sys/ipc.h>
 #include <sys/sem.h>
+#include <sys/mman.h>
 #include <semaphore.h>
 #include <signal.h>
+#include <fcntl.h>
 
 #define reset	"\x1b[0m"
 #define red 	"\x1b[31m"	// Errors
@@ -56,15 +58,23 @@ void printStatus(int shmid)
 void* printBank(void* shmid)
 {
 	// initial of the thread
-	// static int logfd;
-	// logfd = open("test.txt", O_CREAT | O_RDWR | O_EXCL, 0666);
+	static int logfd;
+	logfd = open("test.txt", O_CREAT | O_RDWR | O_EXCL, 0666);
 	// if (logfd == -1) {
 	// 	// already exists
 	// 	logfd = open("test.txt", O_RDWR);
 	// }
-	// struct sharedMemory f;
-	// write(logfd, &f, sizeof(struct sharedMemory));
-	// void *mem = mmap(NULL, sizeof(struct sharedMemory), PROT_WRITE, MAP_PUBLIC, logfd, 0);
+	sharedMemory f;
+	write(logfd, &f, sizeof(struct sharedMemory));
+	void *mem = mmap(NULL, sizeof(struct sharedMemory), PROT_WRITE, MAP_SHARED, logfd, 0);
+	//memcpy
+	// if(write(logfd, "test1\n", 6) != 6)
+	// {
+	// 	printf("stuff happend\n");
+	// }else{
+	// 	printf("stuff didn't happen\n");
+	// }
+
 
 	// loop
 	while (1)
