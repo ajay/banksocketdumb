@@ -59,14 +59,26 @@ void* printBank(void* shmid)
 {
 	// initial of the thread
 	static int logfd;
-	logfd = open("test.txt", O_CREAT | O_RDWR | O_EXCL, 0666);
-	// if (logfd == -1) {
-	// 	// already exists
-	// 	logfd = open("test.txt", O_RDWR);
-	// }
-	sharedMemory f;
-	write(logfd, &f, sizeof(struct sharedMemory));
-	void *mem = mmap(NULL, sizeof(struct sharedMemory), PROT_WRITE, MAP_SHARED, logfd, 0);
+	logfd = open("bankdata.dat", O_CREAT | O_RDWR | O_EXCL, 0666);
+
+	if (logfd == -1) {
+		// already exists
+		printf(blue "Found bankdata.dat, loading bank account data\n" reset);
+		logfd = open("bankdata.dat", O_RDWR);
+	}
+	else
+	{
+		sharedMemory *f = (sharedMemory *)shmat((int)(size_t)shmid, NULL, 0); //attach shared memory
+		printf(blue "Creating initial bankdata.dat\n" reset);
+		if (write(logfd, &f, sizeof(struct sharedMemory)) < 0)
+		{
+			perror(red "ERROR: Writing to bankdata.dat" reset);
+		}
+		void *mem = mmap(NULL, sizeof(struct sharedMemory), PROT_WRITE, MAP_SHARED, logfd, 0);
+		memcpy(mem, f, sizeof(struct sharedMemory));
+		shmdt(f);
+	}
+
 	//memcpy
 	// if(write(logfd, "test1\n", 6) != 6)
 	// {
@@ -80,6 +92,15 @@ void* printBank(void* shmid)
 	while (1)
 	{
 		sleep(20);
+		sharedMemory *f = (sharedMemory *)shmat((int)(size_t)shmid, NULL, 0); //attach shared memory
+		printf(red "CREATING DATA\n" reset);
+		if (write(logfd, &f, sizeof(struct sharedMemory)) < 0)
+		{
+			perror(red "ERROR: Writing to bankdata.dat" reset);
+		}
+		void *mem = mmap(NULL, sizeof(struct sharedMemory), PROT_WRITE, MAP_SHARED, logfd, 0);
+		memcpy(mem, f, sizeof(struct sharedMemory));
+		shmdt(f);
 		printStatus((int)(size_t)shmid);
 	}
 }

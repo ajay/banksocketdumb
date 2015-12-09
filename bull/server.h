@@ -2,7 +2,6 @@
 #include <stdbool.h>
 #include <semaphore.h>
 #include <pthread.h>
-#include "client_handler.c"
 
 #ifndef SERVER_H
 #define SERVER_H
