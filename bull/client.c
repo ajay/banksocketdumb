@@ -6,12 +6,15 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <signal.h>
+#include <stdbool.h>
 
 #define reset	"\x1b[0m"
 #define red 	"\x1b[31m"	// Errors
 #define green	"\x1b[32m"	// Messages from server
 #define yellow	"\x1b[33m"	// Server / Client comm
 #define blue	"\x1b[36m"	// Threads / Proccesses
+
+static bool wait = false;
 
 void client_stop(int signo)
 {
@@ -46,12 +49,20 @@ void *comm_sender(void* sockfd)
 		};
 
 		// Send message to server
+		resend:
 		if (write((int)(size_t)sockfd, buffer, strlen(buffer)) < 0)
 		{
 			perror(red "ERROR writing to socket" reset);
 			exit(1);
 		}
-		sleep(2);  //throttle 2 seconds
+
+		sleep(2);
+
+		while(wait == true)
+		{
+			printf(yellow "Attempting to re-connect every 2 seconds...\n" reset);
+			goto resend;
+		}
 	}
 	return NULL;
 }
@@ -68,13 +79,21 @@ void *comm_listener(void* sockfd)
 			perror(red "ERROR reading from socket" reset);
 		}
 
-		printf(green "Received message from server: " reset);
-		printf("%s\n", buffer);
-
 		if (strcmp(buffer, "exit") == 0)
 		{
+			printf(green "Received message from server: " reset);
+			printf("%s\n", buffer);
 			exit(0);
 		}
+		else if(strcmp(buffer, "loginWait") == 0)
+		{
+			wait = true;
+		}else{
+			printf(green "Received message from server: " reset);
+			printf("%s\n", buffer);
+			wait = false;
+		}
+
 	}
 	return NULL;
 }

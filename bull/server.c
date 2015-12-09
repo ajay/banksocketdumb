@@ -40,6 +40,7 @@ void printStatus(int shmid)
 	sharedMemory *bank = (sharedMemory *)shmat((int)(size_t)shmid, NULL, 0);
 	sem_wait(&bank->bankLock);
 
+	printf("Bank Accounts\n");
 	printf(purple "-------------------------------------------------------------\n");
 
 	for(int j = 0; j < 20; j++)
@@ -54,6 +55,18 @@ void printStatus(int shmid)
 
 void* printBank(void* shmid)
 {
+	// initial of the thread
+	// static int logfd;
+	// logfd = open("test.txt", O_CREAT | O_RDWR | O_EXCL, 0666);
+	// if (logfd == -1) {
+	// 	// already exists
+	// 	logfd = open("test.txt", O_RDWR);
+	// }
+	// struct sharedMemory f;
+	// write(logfd, &f, sizeof(struct sharedMemory));
+	// void *mem = mmap(NULL, sizeof(struct sharedMemory), PROT_WRITE, MAP_PUBLIC, logfd, 0);
+
+	// loop
 	while (1)
 	{
 		sleep(20);
@@ -158,6 +171,7 @@ char* doprocessing (char *buffer, int sock, int shmid)
 			{
 				printf("The account name '%s' exists at index '%d'\n", accName, x);  //Case 1. Account exists and i got index
 				y = 1;
+
 				bank->accounts[x].inSession = true;
 
 				char toSend[100];
@@ -211,7 +225,7 @@ char* doprocessing (char *buffer, int sock, int shmid)
 					else if(strcmp(command, "debit") == 0)
 					{
 						float num = atof(amount);
-						if (num < bank->accounts[x].balance)
+						if (num <= bank->accounts[x].balance)
 						{
 							sprintf(toSend, "Debiting account '%s' by '%.2f'\n", bank->accounts[x].name, num);
 							bank->accounts[x].balance -= num;
@@ -253,6 +267,18 @@ char* doprocessing (char *buffer, int sock, int shmid)
 					sem_post(&bank->accounts[x].lock);
 				}
 				break;
+			}else if(strcmp(bank->accounts[x].name, accName) == 0 && bank->accounts[x].inSession == true){
+				char toSend[100];
+				sprintf(toSend, "loginWait");
+				y=1;
+				if (write(sock, toSend, strlen(toSend)) < 0)
+				{
+					perror(red "ERROR writing start back to client" reset);
+				}
+				// buffer[strlen(buffer)-1] = '\0';
+
+				// char* command = strtok(buffer, " ");
+				// char* amount = command+strlen(command)+1;
 			}
 		}
 
@@ -291,12 +317,24 @@ char* doprocessing (char *buffer, int sock, int shmid)
 			perror("n<0 ");
 		}
 	}
+	else
+	{
+		char send[200];
+		sprintf(send, "INVALID INPUT: '%s' is not a command", buffer);
+		int a;
+		a = write(sock, send, strlen(send));
+
+		if(a < 0)
+		{
+			perror("n<0 ");
+		}
+	}
 
 
 
 	// printf("acc is %d\n", acc);      token = strtok(NULL, s);
 
-	printf("locking sem for account: %s, pid = %d\n", bank->accounts[acc].name, getpid());
+	// printf("locking sem for account: %s, pid = %d\n", bank->accounts[acc].name, getpid());
 	sem_wait(&bank->accounts[acc].lock);
 
 	// printf("Account name %d: %s\n", acc, bank->accounts[acc].name);
@@ -305,7 +343,7 @@ char* doprocessing (char *buffer, int sock, int shmid)
 	bzero(buffer, 256);
 	// n = read(sock, buffer, 255);
 
-	printf("unlocking sem for account: %s\n", bank->accounts[acc].name);
+	// printf("unlocking sem for account: %s\n", bank->accounts[acc].name);
 	sem_post(&bank->accounts[acc].lock);
 
 	shmdt(bank); //detach shared memory
@@ -390,7 +428,6 @@ int main(int argc, char *argv[])
 
 
 
-
 	int sockfd;
 	int newsockfd;
 	socklen_t clilen;
@@ -424,8 +461,6 @@ int main(int argc, char *argv[])
 	    perror("setsockopt");
 	    exit(1);
 	}
-
-
 
 
 
