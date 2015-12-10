@@ -48,7 +48,8 @@ void printStatus(int shmid)
 	for(int j = 0; j < 20; j++)
 	{
 		if (strcmp(bank->accounts[j].name, "<empty>") != 0)
-			printf("Account Name: %s\tBalance: %.2f\tIn Session: %d\n", bank->accounts[j].name, bank->accounts[j].balance, bank->accounts[j].inSession);
+			if (strcmp(bank->accounts[j].name, "") != 0)
+				printf("Account Name: %s\tBalance: %.2f\tIn Session: %d\n", bank->accounts[j].name, bank->accounts[j].balance, bank->accounts[j].inSession);
 	}
 	printf("\n" reset);
 	sem_post(&bank->bankLock);
@@ -57,51 +58,60 @@ void printStatus(int shmid)
 
 void* printBank(void* shmid)
 {
+	// Actual shared memory
+	sharedMemory *bank = (sharedMemory *)shmat((int)(size_t)shmid, NULL, 0); //attach shared memory
+
+	// Temp struct to read in data
+	sharedMemory *f = malloc(sizeof(sharedMemory));
+
+	// Setting up mmap
 	void *mem;
-	// initial of the thread
 	static int logfd;
 	logfd = open("bankdata.dat", O_CREAT | O_RDWR | O_EXCL, 0666);
 
-	if (logfd == -1) {
-		// already exists
+	// If the file already exists
+	if (logfd == -1)
+	{
 		printf(yellow "Found bankdata.dat, loading bank account data\n" reset);
 		logfd = open("bankdata.dat", O_RDWR);
-		mem = mmap(NULL, sizeof(struct sharedMemory), PROT_WRITE, MAP_SHARED, logfd, 0);
-
+		mem = mmap(NULL, sizeof(struct sharedMemory), PROT_WRITE | PROT_READ, MAP_SHARED, logfd, 0);
+		memcpy(f, mem, sizeof(struct sharedMemory));
 	}
+
+	// If the file needs to be created
 	else
 	{
-		sharedMemory *f = (sharedMemory *)shmat((int)(size_t)shmid, NULL, 0); //attach shared memory
 		printf(yellow "Creating initial bankdata.dat\n" reset);
-		if (write(logfd, (void*)f, sizeof(struct sharedMemory)) < 0)
+		if (write(logfd, (void*)bank, sizeof(struct sharedMemory)) < 0)
 		{
 			perror(yellow "ERROR: Writing to bankdata.dat" reset);
 		}
 		mem = mmap(NULL, sizeof(struct sharedMemory), PROT_WRITE, MAP_SHARED, logfd, 0);
-		memcpy(mem, f, sizeof(struct sharedMemory));
-		shmdt(f);
+		memcpy(mem, bank, sizeof(struct sharedMemory));
 	}
 
-	//memcpy
-	// if(write(logfd, "test1\n", 6) != 6)
-	// {
-	// 	printf("stuff happend\n");
-	// }else{
-	// 	printf("stuff didn't happen\n");
-	// }
+	printf("LOADING DATA FROM 'bankdata.dat'\n");
+	for(int j = 0; j < 20; j++)
+	{
+		if (strcmp(f->accounts[j].name, "<empty>") != 0)
+		{
+			strcpy(bank->accounts[j].name, f->accounts[j].name);
+			if (strcmp(bank->accounts[j].name, "") == 0)
+				strcpy(bank->accounts[j].name, "<empty>");
+			bank->accounts[j].balance = f->accounts[j].balance;
+		}
+	}
 
-
-	// loop
+	// Broadcast loop
 	while (1)
 	{
-		sleep(20);
-		sharedMemory *f = (sharedMemory *)shmat((int)(size_t)shmid, NULL, 0); //attach shared memory
-		sem_wait(&f->bankLock);
-		printf(red "CREATING DATA\n" reset);
-		memcpy(mem, f, sizeof(struct sharedMemory));
+		sleep(1);
+		// sem_wait(&f->bankLock);
+		// printf(red "CREATING DATA\n" reset);
+		memcpy(mem, bank, sizeof(struct sharedMemory));
 		printStatus((int)(size_t)shmid);
-		shmdt(f);
-		sem_post(&f->bankLock);
+		// shmdt(f);
+		// sem_post(&f->bankLock);
 	}
 }
 
@@ -123,11 +133,7 @@ char* doprocessing (char *buffer, int sock, int shmid)
 	char* command = strtok(buffer, " ");
 	char* accName = command+strlen(command)+1;
 
-	sharedMemory *bank = (sharedMemory *)shmat(shmid, NULL, 0); //attach shared memory
-
-
-
-
+	sharedMemory *bank = (sharedMemory *)shmat(shmid, NULL, 0);
 
 	if (strcmp(command, "open") == 0)
 	{
@@ -191,7 +197,7 @@ char* doprocessing (char *buffer, int sock, int shmid)
 		printStatus(shmid);
 	}
 
-	if(strcmp(command, "start") == 0)
+	else if(strcmp(command, "start") == 0)
 	{
 		int x;
 		int y = 0;
